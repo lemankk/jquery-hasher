@@ -18,7 +18,7 @@ var Hasher = {};
 Hasher.current = null;
 Hasher.last = null;
 
-Hasher.change = function(addr,slient) {}
+Hasher.change = function(addr,slient,title) {}
 
 Hasher.events = {};
 Hasher.events.change = 'hasher_change';
@@ -84,8 +84,9 @@ var change = function(addr,slient,title){
 		onAddrChange();
 	}
 }
-var urlQueryToObject = function(p,out){
+var urlQueryToObject = function(p){
 	if(typeof p == 'object')return p;
+	var out = arguments.length > 1 ? arguments[1] : null;
 	
 	// if no object passed, then we create a new one.
 	if(!out) out = {};
@@ -113,8 +114,8 @@ var urlQueryToObject = function(p,out){
 	}
 	return out;
 }
-var parsePath = function(s,sp){
-	
+var parsePath = function(s){
+	var sp = arguments.length > 1 ? arguments[1] : null;
 	var out = new HasherResult();
 	out.requested = s;
 	
