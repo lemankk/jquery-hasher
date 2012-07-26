@@ -14,21 +14,7 @@ http://www.opensource.org/licenses/mit-license.php
 http://www.gnu.org/licenses/gpl.html
 //*/
 
-var Hasher = {};
-Hasher.current = null;
-Hasher.last = null;
-
-Hasher.change = function(addr,slient,title) {}
-
-Hasher.events = {};
-Hasher.events.change = 'hasher_change';
-
-Hasner.history ={};
-Hasher.history.support = ( window.history && window.history.pushState && window.history.replaceState) ;
-Hasher.history.basePath= '';
-Hasher.history.baseQuery = {};
-
-/**/;(function ($){
+;(function ($,win,doc,undefined){
 
 var HasherResult = function(){
 	this.parameters = {};
@@ -40,50 +26,6 @@ var HasherResult = function(){
 }
 HasherResult.prototype = {hash:'',requested:'',path:'',parameters:null,nodes:null};
 
-var last, current, lastAddr; 
-last = current = new HasherResult();
-
-var onBrowserHashChange = function(evt){
-	check();
-}
-var onBrowserHistoryPopState = function(evt){
-	check();
-}
-var enable = function(slient){
-	$(window).bind('hashchange',onBrowserHashChange);
-	$(window).bind('popstate',onBrowserHistoryPopState);
-	if(!slient)
-	check();
-}
-
-var disable = function(){
-	$(window).unbind('hashchange',onBrowserHashChange);
-	$(window).unbind('popstate',onBrowserHistoryPopState);
-}
-var onAddrChange = function(){
-	$(window).trigger(Hasher.events.change);
-}
-var change = function(addr,slient,title){
-	last = current;
-	
-	nextAddr = addr;
-	current = parsePath(nextAddr, Hasher.history.baseQuery);
-	
-	if(!title) title = document.title ? document.title : '';
-	
-	if(Hasher.historyPushSupport){
-		window.history.pushState(null, title, current.requested);
-	}else{
-		location.hash = addr;
-	}
-	
-	Hasher.last = last;
-	Hasher.current = current;
-	
-	if(last && last.path != current.path && !slient){
-		onAddrChange();
-	}
-}
 var urlQueryToObject = function(p){
 	if(typeof p == 'object')return p;
 	var out = arguments.length > 1 ? arguments[1] : null;
@@ -148,16 +90,82 @@ var parsePath = function(s){
 		fp+= key+'='+escape(out.parameters[key]);
 	}
 	out.search = fp;
-	out.hash = Hasher.history.support?'': s + fp;
-	out.path = Hasher.history.support? ('/'+s).substr(Hasher.history.basePath.length):  s;
+	out.hash = _history.support?'': s + fp;
+	out.path = _history.support? ('/'+s).substr(_history.basePath.length):  s;
 	out.nodes = ary;
-	out.requested = Hasher.history.basePath + out.path + fp;
+	out.requested = _history.basePath + out.path + fp;
 	return out;
+}
+
+var _history ={};
+_history.enabled = true;
+_history.support = ( win.history && win.history.pushState && win.history.replaceState) ? true :false ;
+_history.basePath= '';
+_history.baseQuery = {};
+var isHistoryAllowed = function(){ return _history.supported && _history.supported};
+
+var Hasher = {};
+Hasher.events = {};
+Hasher.events.change = 'hasher_change';
+
+Hasher.history = _history;
+
+Hasher.current = null;
+Hasher.last = null;
+
+
+
+var last, current, lastAddr; 
+last = current = new HasherResult();
+
+var onBrowserHashChange = function(evt){
+	check();
+}
+var onBrowserHistoryPopState = function(evt){
+	check();
+}
+var isHistoryEnabled = function(){
+	return _history.support && _history.enabled;
+}
+var enable = function(slient){
+	$(win).bind('hashchange',onBrowserHashChange);
+	$(win).bind('popstate',onBrowserHistoryPopState);
+	if(!slient)
+	check();
+}
+
+var disable = function(){
+	$(win).unbind('hashchange',onBrowserHashChange);
+	$(win).unbind('popstate',onBrowserHistoryPopState);
+}
+var onAddrChange = function(){
+	$(win).trigger(Hasher.events.change);
+}
+var change = function(addr,slient,title){
+	last = current;
+	
+	nextAddr = addr;
+	current = parsePath(nextAddr, _history.baseQuery);
+	
+	if(!title) title = doc.title ? doc.title : '';
+	
+	if(isHistoryAllowed()){
+		win.history.pushState(null, title, current.requested);
+	}else{
+		location.hash = addr;
+	}
+	
+	Hasher.last = last;
+	Hasher.current = current;
+	
+	if(last && last.path != current.path && !slient){
+		onAddrChange();
+	}
 }
 var check = function(slient){
 	last = current;
 	
-	if(Hasher.history.support){
+	if(isHistoryAllowed()){
 		nextAddr = location.pathname + location.search;
 		current = parsePath(nextAddr);
 		
@@ -186,14 +194,17 @@ Hasher.check = check;
 Hasher.change = change;
 Hasher.current = current;
 Hasher.last = last;
-
-$(document).ready(function(){
-	if(Hasher.history.basePath == null) Hasher.history.basePath = location.pathname;
-	if(Hasher.history.baseQuery == null) Hasher.history.baseQuery =  urlQueryToObject(location.search);
-
-	enable(true);
-	check(true);
-});
+Hasher.utils = {};
+Hasher.utils.urlQueryToObject = urlQueryToObject;
+Hasher.utils.parsePath = parsePath;
 
 $.hasher= Hasher;
-})(jQuery);
+win.Hasher = Hasher;
+
+
+if(_history.basePath == null) _history.basePath = location.pathname;
+if(_history.baseQuery == null) _history.baseQuery =  urlQueryToObject(location.search);
+
+enable(true);
+check(true);
+})(jQuery,window,document);
