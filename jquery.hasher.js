@@ -59,7 +59,8 @@ var urlQueryToObject = function(p){
 var parsePath = function(s){
 	var sp = arguments.length > 1 ? arguments[1] : null;
 	var out = new HasherResult();
-	out.requested = s;
+	if(s.indexOf(_history.basePath) == 0)
+		s = s.substr(_history.basePath.length);
 	
 	var p = '';
 	var ps = s.indexOf('#');
@@ -74,7 +75,7 @@ var parsePath = function(s){
 		p = s.substr(ps + 1);
 		s = s.substr(0,ps);
 	}
-	var ary = s.split('/');
+	var ary = s == '' ? [] : s.split('/');
 	var key , val;
 	if(sp && typeof sp =='object'){
 		for(key in sp){
@@ -89,9 +90,10 @@ var parsePath = function(s){
 		fp+= fp.length > 0?'&':'?';
 		fp+= key+'='+escape(out.parameters[key]);
 	}
+	
 	out.search = fp;
 	out.hash = _history.support?'': s + fp;
-	out.path = _history.support? ('/'+s).substr(_history.basePath.length):  s;
+	out.path = _history.support && ('/'+s).indexOf(_history.basePath) == 0 ?('/'+s).substr(_history.basePath.length):  s;
 	out.nodes = ary;
 	out.requested = _history.basePath + out.path + fp;
 	return out;
@@ -102,20 +104,19 @@ _history.enabled = true;
 _history.support = ( win.history && win.history.pushState && win.history.replaceState) ? true :false ;
 _history.basePath= '';
 _history.baseQuery = {};
-var isHistoryAllowed = function(){ return _history.supported && _history.supported};
 
 var Hasher = {};
 Hasher.events = {};
 Hasher.events.change = 'hasher_change';
-
 Hasher.history = _history;
 
-Hasher.current = null;
-Hasher.last = null;
 
+Hasher.setBasePath = function(val){
+	_history.basePath = val;
+	check(true);
+}
 
-
-var last, current, lastAddr; 
+var last, current, nextAddr; 
 last = current = new HasherResult();
 
 var onBrowserHashChange = function(evt){
@@ -131,7 +132,7 @@ var enable = function(slient){
 	$(win).bind('hashchange',onBrowserHashChange);
 	$(win).bind('popstate',onBrowserHistoryPopState);
 	if(!slient)
-	check();
+	check(slient);
 }
 
 var disable = function(){
@@ -145,18 +146,15 @@ var change = function(addr,slient,title){
 	last = current;
 	
 	nextAddr = addr;
-	current = parsePath(nextAddr, _history.baseQuery);
+	current = parsePath(addr, _history.baseQuery);
 	
 	if(!title) title = doc.title ? doc.title : '';
 	
-	if(isHistoryAllowed()){
+	if(isHistoryEnabled()){
 		win.history.pushState(null, title, current.requested);
 	}else{
 		location.hash = addr;
 	}
-	
-	Hasher.last = last;
-	Hasher.current = current;
 	
 	if(last && last.path != current.path && !slient){
 		onAddrChange();
@@ -165,12 +163,9 @@ var change = function(addr,slient,title){
 var check = function(slient){
 	last = current;
 	
-	if(isHistoryAllowed()){
-		nextAddr = location.pathname + location.search;
+	if(isHistoryEnabled()){
+		nextAddr = location.href;
 		current = parsePath(nextAddr);
-		
-		Hasher.current = current;
-		Hasher.last = last;
 		
 		if(last && last.path != current.path && !slient)
 			onAddrChange();
@@ -179,9 +174,6 @@ var check = function(slient){
 		
 		nextAddr = location.hash;
 		current = parsePath(nextAddr);
-		
-		Hasher.current = current;
-		Hasher.last = last;
 		
 		if(last && last.path != current.path && !slient)
 			onAddrChange();
@@ -192,8 +184,10 @@ Hasher.enable = enable;
 Hasher.disable = disable;
 Hasher.check = check;
 Hasher.change = change;
-Hasher.current = current;
-Hasher.last = last;
+
+Hasher.current = function(){return current;}
+Hasher.last = function(){return last;}
+
 Hasher.utils = {};
 Hasher.utils.urlQueryToObject = urlQueryToObject;
 Hasher.utils.parsePath = parsePath;
@@ -205,6 +199,4 @@ win.Hasher = Hasher;
 if(_history.basePath == null) _history.basePath = location.pathname;
 if(_history.baseQuery == null) _history.baseQuery =  urlQueryToObject(location.search);
 
-enable(true);
-check(true);
 })(jQuery,window,document);
