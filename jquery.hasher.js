@@ -19,12 +19,26 @@ http://www.gnu.org/licenses/gpl.html
 var HasherResult = function(){
 	this.parameters = {};
 	this.nodes = [];
-	this.hash = '';
-	this.requested = '';
-	this.path = '';
-	this.search = '';
 }
-HasherResult.prototype = {hash:'',requested:'',path:'',parameters:null,nodes:null};
+HasherResult.prototype = {
+	hash:'',
+	requested:'',
+	path:'',
+	search:'',
+	parameters:null,
+	nodes:null,
+	node: function(idx){
+		if(!idx ) idx = 0;
+		if(idx<0) idx = this.nodes.length + idx;
+		if(this.nodes.length > idx && idx >=0 ) return this.nodes[idx];
+		return null;
+	},
+	parameter: function(key){
+		if(!key ) return null;
+		if(this.parameters && typeof this.parameters[key] != 'undefined') return this.parameters[key];
+		return null;
+	}
+};
 
 var urlQueryToObject = function(p){
 	if(typeof p == 'object')return p;
@@ -56,46 +70,96 @@ var urlQueryToObject = function(p){
 	}
 	return out;
 }
-var parsePath = function(s){
-	var sp = arguments.length > 1 ? arguments[1] : null;
-	var out = new HasherResult();
-	if(s.indexOf(_history.basePath) == 0)
-		s = s.substr(_history.basePath.length);
+var parsePath = function(path, addiotnalSearchParameter){
+	if(!path){
+		path = '';
+	}
+	var s = String(path);
 	
-	var p = '';
-	var ps = s.indexOf('#');
-	if(ps>=0){
-		s = s.substr(ps+1);
-	}
-	if(s[0] == '/'){
-		s = s.substr(1);
-	}
-	ps = s.indexOf('?');
-	if(ps>=0){
-		p = s.substr(ps + 1);
-		s = s.substr(0,ps);
-	}
-	var ary = s == '' ? [] : s.split('/');
-	var key , val;
-	if(sp && typeof sp =='object'){
-		for(key in sp){
-			out.parameters[key] = sp[key];
+	var out = new HasherResult();
+	
+	if(typeof addiotnalSearchParameter != 'object')
+		addiotnalSearchParameter = null;
+	else{
+		for(key in addiotnalSearchParameter){
+			out.parameters[key] = addiotnalSearchParameter[key];
 		}
 	}
-	if(p && p.length > 0){
-		urlQueryToObject( p, out.parameters);
+	
+	var hashStr = null;
+	var hashParameterStr = null;
+	var posStr = s.indexOf('#');
+	if(posStr>=0){
+		hashStr = s.substr(posStr+1);
+		s = s.substr(0,posStr);
+		
+		posStr = hashStr.indexOf('?');
+		if(posStr>=0){
+			hashParameterStr = hashStr.substr(posStr + 1);
+			hashStr = hashStr.substr(0,posStr);
+		}
 	}
-	var fp = '';
-	for(key in out.parameters){
-		fp+= fp.length > 0?'&':'?';
-		fp+= key+'='+escape(out.parameters[key]);
+	var parameterStr = '';
+	posStr = s.indexOf('?');
+	if(posStr>=0){
+		parameterStr = s.substr(posStr + 1);
+		s = s.substr(0,posStr);
 	}
 	
-	out.search = fp;
-	out.hash = _history.support?'': s + fp;
-	out.path = _history.support && ('/'+s).indexOf(_history.basePath) == 0 ?('/'+s).substr(_history.basePath.length):  s;
+	// remove head slash
+	if(s.substr(0,1) == '/'){
+		s = s.substr(1);
+	}
+	
+	if(isHistoryEnabled()){
+		var _basePath = String(_history.basePath);
+		// Bug fix : when the requested path act as directory and 
+		// pass without slash at the tail
+		// we assume that is same directory
+		// For example : 
+		// Requested: /some/where/path
+		// Base Path: /some/where/path/
+		// Then the requested path will be same as base path
+		if(_basePath.substr(-1,1) == '/' && _basePath.substr(0,_basePath.length-1) == s)
+			s = '';
+		else if(s.indexOf(_basePath) == 0)
+			s = s.substr(_basePath.length);
+	
+		// remove head slash
+		if(s.substr(0,1) == '/'){
+			s = s.substr(1);
+		}
+	}else{
+		if(hashStr == null)
+			hashStr = s;
+		else
+			s = hashStr;
+	}
+	
+	// split path into an array by slash
+	var ary = s == '' ? [] : s.split('/');
+	var key , val;
+	
+	if(parameterStr && parameterStr.length > 0){
+		urlQueryToObject( parameterStr, out.parameters);
+	}
+	if(hashParameterStr && hashParameterStr.length > 0){
+		urlQueryToObject( hashParameterStr, out.parameters);
+	}
+	
+	var mergedParameterStr = '';
+	for(key in out.parameters){
+		mergedParameterStr+= mergedParameterStr.length > 0?'&':'';
+		mergedParameterStr+= key+'='+escape(out.parameters[key]);
+	}
+	
+	out.search = mergedParameterStr;
+	out.hash = hashStr;
+	out.hashParameter = hashParameterStr;
+	out.path = s;
 	out.nodes = ary;
-	out.requested = _history.basePath + out.path + fp;
+	out.requested = _history.basePath + out.path;
+	if(mergedParameterStr!='') out.requested += '?'+mergedParameterStr;
 	return out;
 }
 
@@ -142,24 +206,48 @@ var disable = function(){
 var onAddrChange = function(){
 	$(win).trigger(Hasher.events.change);
 }
-var change = function(addr,slient,title){
+var change = function(addr,slient){
+	if(typeof addr == 'undefined') return;
+	
 	last = current;
+	
 	
 	nextAddr = addr;
 	current = parsePath(addr, _history.baseQuery);
 	
-	if(!title) title = doc.title ? doc.title : '';
+	var title = $.hasher.getTitle(current);
+	
+	try{
+		document.title = title;
+	}catch(error){}
 	
 	if(isHistoryEnabled()){
 		win.history.pushState(null, title, current.requested);
 	}else{
-		location.hash = addr;
+		location.hash = current.path;
 	}
 	
 	if(last && last.path != current.path && !slient){
 		onAddrChange();
 	}
 }
+var replace = function(addr){
+	if(typeof addr == 'undefined') return;
+	nextAddr = addr;
+	current = parsePath(addr, _history.baseQuery);
+	
+	var title = $.hasher.getTitle(current);
+	
+	try{
+		document.title = title;
+	}catch(error){}
+	
+	if(isHistoryEnabled()){
+		win.history.replaceState(null, title, current.requested);
+	}else{
+		location.hash = current.path;
+	}
+} 
 var check = function(slient){
 	last = current;
 	
@@ -167,24 +255,29 @@ var check = function(slient){
 		nextAddr = location.href;
 		current = parsePath(nextAddr);
 		
-		if(last && last.path != current.path && !slient)
-			onAddrChange();
+		if( !slient)
+			if(!last || last.path != current.path || Hasher.notifyIfNoChange)
+				onAddrChange();
 	}
 	if(location.hash.length>0){
 		
 		nextAddr = location.hash;
 		current = parsePath(nextAddr);
 		
-		if(last && last.path != current.path && !slient)
-			onAddrChange();
+		if( !slient)
+			if(!last || last.path != current.path || Hasher.notifyIfNoChange)
+				onAddrChange();
 	}
 }
+
+Hasher.getTitle = function(){return doc.title;}
 
 Hasher.enable = enable;
 Hasher.disable = disable;
 Hasher.check = check;
 Hasher.change = change;
-
+Hasher.replace = replace;
+Hasher.notifyIfNoChange = true;
 Hasher.current = function(){return current;}
 Hasher.last = function(){return last;}
 
